@@ -1,0 +1,38 @@
+function [Combine_Z,Combine_R] = PDA(Z_Matrix, PZ_Matrix, Z_Predict, PZ_Predict) 
+% 概率数据关联，杂波空间密度为泊松分布随机变量 输入： Z_Matrix：波门内的所有有效量测值 PZ_Matrix：有效量测值的误差方差阵
+% Z_Predict：预测量测值 PZ_Predict：预测量测值的误差方差阵 输出： Combine_R为组合量测
+% Combine_R：组合量测对应的协方差 中间变量： beta为正确关联概率
+lamda=0.0004;       %公式需要，单位面积内的杂波点个数
+Pd=1;               %检测概率，当不取1时，后面的a计算出来都是0 ，公式需要
+Pg=0.9997;          %门限概率 
+ 
+nm=size(Z_Matrix); 
+n=nm(2);   % 量测数量       多少个测量
+m=nm(1);   % 测量维数       每个测量有几个量
+ 
+for i=1:1:n %%%%%核心循环
+    e(:,i)=Z_Matrix(:,i)-Z_Predict; %残差
+    S(:,:,i)=PZ_Predict+PZ_Matrix(:,:,i);  %新息协方差 （X、R、Q互不相关条件下 ）
+    % 何友 计算方法P115 式（7.36） a(i)=exp((-1/2)*e(i)'*inv(S(i))*e(i));
+    % 残差
+    % bk(i)=lamda*sqrt((2*pi)*det(S(i)))*(1-Pd*Pg)/Pd; 杨万海P86式（3-5-7）
+    a(i)=Pd*exp((-1/2)*(e(:,i)'*inv(S(:,:,i))*e(:,i)));       %似然函数的分子之类的                    好像是第i个测量来自目标的概率
+    bk(i)=lamda*(sqrt(2*pi))^m*sqrt(det(S(:,:,i)))*(1-Pd);    %似然函数的分母之类的        这个好像是第i个测量是杂波的概率
+end 
+for i=1:1:n 
+    beta_i(i)=a(i)/(bk(i) + sum(a));     %根据似然函数求得的贝叶斯概率                            每个量测来自目标的概率/总概率
+end 
+% 扩充正确关联概率，使得每一维量测都有对应的关联概率
+beta = beta_i; %%%%%%产生两行关联概率
+for i=1:m-1 
+    beta=[beta;beta_i]; 
+end 
+M = beta.*Z_Matrix; 
+Combine_Z=sum(M',1); 
+Combine_Z=Combine_Z'; %%%%%%%%%%求综合观测
+Combine_R=0; %%%%%%%求新的协方差
+for i=1:n 
+    Combine_R = Combine_R + (beta(:,i)*beta(:,i)').*PZ_Matrix(:,:,i); 
+end 
+beta_i(n); %%%%
+end
